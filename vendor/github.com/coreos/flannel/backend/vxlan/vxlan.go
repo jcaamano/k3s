@@ -55,7 +55,6 @@ package vxlan
 import (
 	"encoding/json"
 	"fmt"
-	log "k8s.io/klog"
 	"net"
 	"sync"
 
@@ -64,6 +63,7 @@ import (
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
 	"github.com/coreos/flannel/subnet"
+	log "k8s.io/klog"
 )
 
 func init() {
@@ -88,8 +88,10 @@ func New(sm subnet.Manager, extIface *backend.ExternalInterface) (backend.Backen
 	return backend, nil
 }
 
-func newSubnetAttrs(publicIP net.IP, mac net.HardwareAddr) (*subnet.LeaseAttrs, error) {
-	data, err := json.Marshal(&vxlanLeaseAttrs{hardwareAddr(mac)})
+func newSubnetAttrs(publicIP net.IP, vnid uint16, mac net.HardwareAddr) (*subnet.LeaseAttrs, error) {
+	data, err := json.Marshal(&vxlanLeaseAttrs{
+		VNI:     vnid,
+		VtepMAC: hardwareAddr(mac)})
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +103,7 @@ func newSubnetAttrs(publicIP net.IP, mac net.HardwareAddr) (*subnet.LeaseAttrs, 
 	}, nil
 }
 
-func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
+func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg *sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
 	// Parse our configuration
 	cfg := struct {
 		VNI           int
@@ -136,7 +138,7 @@ func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, 
 	}
 	dev.directRouting = cfg.DirectRouting
 
-	subnetAttrs, err := newSubnetAttrs(be.extIface.ExtAddr, dev.MACAddr())
+	subnetAttrs, err := newSubnetAttrs(be.extIface.ExtAddr, uint16(cfg.VNI), dev.MACAddr())
 	if err != nil {
 		return nil, err
 	}

@@ -27,9 +27,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
-
-	log "k8s.io/klog"
 
 	"golang.org/x/net/context"
 
@@ -37,7 +36,7 @@ import (
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
 	"github.com/coreos/flannel/subnet"
-	"net"
+	log "k8s.io/klog"
 )
 
 func init() {
@@ -84,7 +83,7 @@ func newSubnetAttrs(publicIP net.IP, vnid uint16, mac net.HardwareAddr) (*subnet
 	}, nil
 }
 
-func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
+func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg *sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
 	// 1. Parse configuration
 	cfg := struct {
 		Name          string
@@ -191,7 +190,10 @@ func (be *VXLANBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, 
 	}
 
 	lease, err = be.subnetMgr.AcquireLease(ctx, subnetAttrs)
-
+	if err != nil {
+		return nil, err
+	}
+	network.SubnetLease = lease
 	return network, nil
 }
 

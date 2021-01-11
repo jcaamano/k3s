@@ -16,13 +16,14 @@
 package ipsec
 
 import (
+	"errors"
 	"fmt"
 	"net"
-
-	log "k8s.io/klog"
-	"github.com/vishvananda/netlink"
+	"syscall"
 
 	"github.com/coreos/flannel/subnet"
+	"github.com/vishvananda/netlink"
+	log "k8s.io/klog"
 )
 
 func AddXFRMPolicy(myLease, remoteLease *subnet.Lease, dir netlink.Dir, reqID int) error {
@@ -30,7 +31,7 @@ func AddXFRMPolicy(myLease, remoteLease *subnet.Lease, dir netlink.Dir, reqID in
 
 	dst := remoteLease.Subnet.ToIPNet()
 
-	policy := netlink.XfrmPolicy{
+	policy := &netlink.XfrmPolicy{
 		Src: src,
 		Dst: dst,
 		Dir: dir,
@@ -47,14 +48,23 @@ func AddXFRMPolicy(myLease, remoteLease *subnet.Lease, dir netlink.Dir, reqID in
 		Reqid: reqID,
 	}
 
-	log.Infof("Adding ipsec policy: %+v", tmpl)
-
 	policy.Tmpls = append(policy.Tmpls, tmpl)
 
-	if err := netlink.XfrmPolicyAdd(&policy); err != nil {
-		return fmt.Errorf("error adding policy: %+v err: %v", policy, err)
+	if existingPolicy, err := netlink.XfrmPolicyGet(policy); err != nil {
+		if errors.Is(err, syscall.ENOENT) {
+			log.Infof("Adding ipsec policy: %+v", tmpl)
+			if err := netlink.XfrmPolicyAdd(policy); err != nil {
+				return fmt.Errorf("error adding policy: %+v err: %v", policy, err)
+			}
+		} else {
+			return fmt.Errorf("error getting policy: %+v err: %v", policy, err)
+		}
+	} else {
+		log.Info("Updating ipsec policy %+v with %+v", existingPolicy, policy)
+		if err := netlink.XfrmPolicyUpdate(policy); err != nil {
+			return fmt.Errorf("error updating policy: %+v err: %v", policy, err)
+		}
 	}
-
 	return nil
 }
 

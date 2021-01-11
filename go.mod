@@ -14,7 +14,7 @@ replace (
 	github.com/containerd/fifo => github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 	github.com/containerd/go-runc => github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
 	github.com/containerd/typeurl => github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
-	github.com/coreos/flannel => github.com/k3s-io/flannel v0.12.0-k3s2
+	github.com/coreos/flannel => github.com/jcaamano/flannel v0.13.1-rc1.0.20210108170524-a20633592e42
 	github.com/coreos/go-systemd => github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/docker/distribution => github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 	github.com/docker/docker => github.com/docker/docker v17.12.0-ce-rc1.0.20200310163718-4634ce647cf2+incompatible
@@ -109,8 +109,8 @@ require (
 	golang.org/x/sys v0.0.0-20201112073958-5cba982894dd
 	google.golang.org/grpc v1.31.1
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/api v0.19.0
-	k8s.io/apimachinery v0.19.0
+	k8s.io/api v0.19.5
+	k8s.io/apimachinery v0.19.5
 	k8s.io/apiserver v0.19.0
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/cloud-provider v0.0.0
