@@ -19,16 +19,15 @@ import (
 	"encoding/json"
 	"net"
 	"sync"
-
-	log "k8s.io/klog"
-	"github.com/vishvananda/netlink"
-	"golang.org/x/net/context"
-
 	"syscall"
+
+	"golang.org/x/net/context"
 
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
 	"github.com/coreos/flannel/subnet"
+	"github.com/vishvananda/netlink"
+	log "k8s.io/klog"
 )
 
 type network struct {
@@ -84,6 +83,7 @@ func (nw *network) MTU() int {
 }
 
 type vxlanLeaseAttrs struct {
+	VNI     uint16
 	VtepMAC hardwareAddr
 }
 

@@ -17,19 +17,17 @@ package extension
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"encoding/json"
 	"os/exec"
 	"sync"
 
-	log "k8s.io/klog"
-
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
 	"github.com/coreos/flannel/subnet"
 	"golang.org/x/net/context"
+	log "k8s.io/klog"
 )
 
 func init() {
@@ -56,7 +54,7 @@ func (_ *ExtensionBackend) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
-func (be *ExtensionBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
+func (be *ExtensionBackend) RegisterNetwork(ctx context.Context, wg *sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
 	n := &network{
 		extIface: be.extIface,
 		sm:       be.sm,
@@ -134,7 +132,6 @@ func (be *ExtensionBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGro
 
 // Run a cmd, returning a combined stdout and stderr.
 func runCmd(env []string, stdin string, name string, arg ...string) (string, error) {
-	env = append(env, fmt.Sprintf("PATH=%s", os.Getenv("PATH")))
 	cmd := exec.Command(name, arg...)
 	cmd.Env = env
 

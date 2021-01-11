@@ -22,10 +22,10 @@ import (
 	"net"
 	"syscall"
 
-	log "k8s.io/klog"
-	"github.com/vishvananda/netlink"
-
+	"github.com/containernetworking/plugins/pkg/utils/sysctl"
 	"github.com/coreos/flannel/pkg/ip"
+	"github.com/vishvananda/netlink"
+	log "k8s.io/klog"
 )
 
 type vxlanDeviceAttrs struct {
@@ -60,6 +60,9 @@ func newVXLANDevice(devAttrs *vxlanDeviceAttrs) (*vxlanDevice, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	_, _ = sysctl.Sysctl(fmt.Sprintf("net/ipv6/conf/%s/accept_ra", devAttrs.name), "0")
+
 	return &vxlanDevice{
 		link: link,
 	}, nil

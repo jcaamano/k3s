@@ -20,21 +20,21 @@ import (
 	"fmt"
 	"sync"
 
-	log "k8s.io/klog"
 	"golang.org/x/net/context"
 
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
 	"github.com/coreos/flannel/subnet"
+	log "k8s.io/klog"
 )
 
 /*
 	Flannel's approach to IPSec uses Strongswan to handle the key exchange (using IKEv2) and the kernel to handle the
 	actual encryption.
 
-	Strongswan's "charon" is bundled in the flannel container. Flannel runs it as a child process when the ipsec backend
-	is selected and communicates with it using the "VICI" interface. Strongswan ships a utility "swanctl" which also
-	uses the VICI interface. This utility is bundled in the flannel container and can help with debugging.
+	Flannel runs Strongswan's "charon" as a child process when the ipsec backend is selected and communicates with it
+	using the "VICI" interface. Strongswan ships a utility "swanctl" which also uses the VICI interface. This utility
+	is bundled in the flannel container and can help with debugging.
 
 	The file "handle_charon.go" contains the logic for working with the charon. It supports creating a "CharonIKEDaemon"
 	which supports loading the PSK into the charon and adding and removing connections.
@@ -70,7 +70,7 @@ func New(sm subnet.Manager, extIface *backend.ExternalInterface) (
 }
 
 func (be *IPSECBackend) RegisterNetwork(
-	ctx context.Context, wg sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
+	ctx context.Context, wg *sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
 
 	cfg := struct {
 		UDPEncap    bool

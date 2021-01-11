@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	log "k8s.io/klog"
 	"golang.org/x/net/context"
 
 	"github.com/coreos/flannel/subnet"
 	"github.com/vishvananda/netlink"
+	log "k8s.io/klog"
 )
 
 const (

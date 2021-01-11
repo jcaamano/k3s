@@ -16,22 +16,20 @@ package hostgw
 
 import (
 	"fmt"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/coreos/flannel/backend"
 	"github.com/coreos/flannel/pkg/ip"
+	"github.com/coreos/flannel/pkg/routing"
 	"github.com/coreos/flannel/subnet"
 	"github.com/pkg/errors"
-	"github.com/rakelkar/gonetsh/netroute"
-	"github.com/rakelkar/gonetsh/netsh"
 	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/wait"
 	log "k8s.io/klog"
-	utilexec "k8s.io/utils/exec"
 )
 
 func init() {
@@ -56,7 +54,7 @@ func New(sm subnet.Manager, extIface *backend.ExternalInterface) (backend.Backen
 	return be, nil
 }
 
-func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
+func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg *sync.WaitGroup, config *subnet.Config) (backend.Network, error) {
 	// 1. Parse configuration
 	cfg := struct {
 		Name          string
@@ -81,11 +79,11 @@ func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup,
 		Mtu:         be.extIface.Iface.MTU,
 		LinkIndex:   be.extIface.Iface.Index,
 	}
-	n.GetRoute = func(lease *subnet.Lease) *netroute.Route {
-		return &netroute.Route{
+	n.GetRoute = func(lease *subnet.Lease) *routing.Route {
+		return &routing.Route{
 			DestinationSubnet: lease.Subnet.ToIPNet(),
 			GatewayAddress:    lease.Attrs.PublicIP.ToIP(),
-			LinkIndex:         n.LinkIndex,
+			InterfaceIndex:    n.LinkIndex,
 		}
 	}
 
@@ -108,7 +106,6 @@ func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup,
 	}
 
 	// 3. Check if the network exists and has the expected settings
-	netshHelper := netsh.New(utilexec.New())
 	createNewNetwork := true
 	expectedSubnet := n.SubnetLease.Subnet
 	expectedAddressPrefix := expectedSubnet.String()
@@ -172,8 +169,13 @@ func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup,
 
 		// Wait for the interface with the management IP
 		log.Infof("Waiting to get net interface for HNSNetwork %s (%s)", networkName, newNetwork.ManagementIP)
+		managementIP, err := ip.ParseIP4(newNetwork.ManagementIP)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to parse management ip (%s)", newNetwork.ManagementIP)
+		}
+
 		waitErr = wait.Poll(500*time.Millisecond, 5*time.Second, func() (done bool, err error) {
-			_, lastErr = netshHelper.GetInterfaceByIP(newNetwork.ManagementIP)
+			_, lastErr = ip.GetInterfaceByIP(managementIP.ToIP())
 			return lastErr == nil, nil
 		})
 		if waitErr == wait.ErrWaitTimeout {
@@ -221,7 +223,15 @@ func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup,
 	log.Infof("Waiting to attach bridge endpoint %s to host", bridgeEndpointName)
 	waitErr = wait.Poll(500*time.Millisecond, 5*time.Second, func() (done bool, err error) {
 		lastErr = expectedBridgeEndpoint.HostAttach(1)
-		return lastErr == nil, nil
+		if lastErr == nil {
+			return true, nil
+		}
+		// See https://github.com/coreos/flannel/issues/1391 and
+		// hcsshim lacks some validations to detect the error, so we judge it by error message.
+		if strings.Contains(lastErr.Error(), "This endpoint is already attached to the switch.") {
+			return true, nil
+		}
+		return false, nil
 	})
 	if waitErr == wait.ErrWaitTimeout {
 		return nil, errors.Wrapf(lastErr, "failed to hot attach bridge HNSEndpoint %s to host compartment", bridgeEndpointName)
@@ -230,23 +240,27 @@ func (be *HostgwBackend) RegisterNetwork(ctx context.Context, wg sync.WaitGroup,
 
 	// 7. Enable forwarding on the host interface and endpoint
 	for _, interfaceIpAddress := range []string{expectedNetwork.ManagementIP, expectedBridgeEndpoint.IPAddress.String()} {
-		netInterface, err := netshHelper.GetInterfaceByIP(interfaceIpAddress)
+		ipv4, err := ip.ParseIP4(interfaceIpAddress)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to parse expected net interface ip (%s)", interfaceIpAddress)
+		}
+
+		netInterface, err := ip.GetInterfaceByIP(ipv4.ToIP())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to find interface for IP Address %s", interfaceIpAddress)
 		}
 		log.Infof("Found %+v interface with IP %s", netInterface, interfaceIpAddress)
 
 		// When a new hns network is created, the interface is modified, esp the name, index
-		if expectedNetwork.ManagementIP == netInterface.IpAddress {
-			n.LinkIndex = netInterface.Idx
+		if expectedNetwork.ManagementIP == ipv4.String() {
+			n.LinkIndex = netInterface.Index
 			n.Name = netInterface.Name
 		}
 
-		interfaceIdx := strconv.Itoa(netInterface.Idx)
-		if err := netshHelper.EnableForwarding(interfaceIdx); err != nil {
-			return nil, errors.Wrapf(err, "failed to enable forwarding on %s index %s", netInterface.Name, interfaceIdx)
+		if err := ip.EnableForwardingForInterface(netInterface); err != nil {
+			return nil, errors.Wrapf(err, "failed to enable forwarding on %s index %d", netInterface.Name, netInterface.Index)
 		}
-		log.Infof("Enabled forwarding on %s index %s", netInterface.Name, interfaceIdx)
+		log.Infof("Enabled forwarding on %s index %d", netInterface.Name, netInterface.Index)
 	}
 
 	return n, nil
